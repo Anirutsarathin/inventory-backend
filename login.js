@@ -7,7 +7,7 @@ const pool = require("./db");
 
 const app = express();
 app.use(cors({
-  origin: "*",     
+  origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
@@ -15,6 +15,7 @@ app.use(cors({
 app.use(bodyParser.json());
 const JWT_SECRET = "my_secret_key";
 
+// API Login
 app.post("/api/login", async (req, res) => {
   const { user, password } = req.body;
 
@@ -27,7 +28,7 @@ app.post("/api/login", async (req, res) => {
     conn = await pool.getConnection();
 
     const rows = await conn.query(
-      `SELECT id, first_name, last_name, phone, email, password_hash, employment_status 
+      `SELECT employee_id, first_name, last_name, phone, email, password, status, login_attempts 
        FROM employees 
        WHERE phone = ? OR email = ? 
        LIMIT 1`,
@@ -40,28 +41,51 @@ app.post("/api/login", async (req, res) => {
 
     const emp = rows[0];
 
-    if (emp.employment_status !== "ACTIVE") {
+    // ตรวจสอบสถานะบัญชี
+    if (emp.status !== 1) {
       return res.status(403).json({ error: "บัญชีนี้ถูกระงับการใช้งาน" });
     }
 
-    const match = await bcrypt.compare(password, emp.password_hash);
+    // ตรวจสอบรหัสผ่าน
+    const match = await bcrypt.compare(password, emp.password);
     if (!match) {
-      return res.status(401).json({ error: "รหัสผ่านไม่ถูกต้อง" });
+      const attempts = emp.login_attempts + 1;
+
+      if (attempts >= 3) {
+        // ล็อกบัญชี
+        await conn.query(
+          "UPDATE employees SET status = 0, login_attempts = ? WHERE employee_id = ?",
+          [attempts, emp.employee_id]
+        );
+        return res.status(403).json({ error: "รหัสผ่านผิดเกิน 3 ครั้ง บัญชีถูกระงับการใช้งาน" });
+      } else {
+        // อัปเดตจำนวนครั้งที่พยายามผิด
+        await conn.query(
+          "UPDATE employees SET login_attempts = ? WHERE employee_id = ?",
+          [attempts, emp.employee_id]
+        );
+        return res.status(401).json({ error: `รหัสผ่านไม่ถูกต้อง (พยายาม ${attempts}/3 ครั้ง)` });
+      }
     }
 
-    const token = jwt.sign(
-      { id: emp.id, phone: emp.phone, email: emp.email },
-      JWT_SECRET,
-      { expiresIn: "30m" }   
+    // ถ้า login สำเร็จ → reset attempts
+    await conn.query(
+      "UPDATE employees SET login_attempts = 0 WHERE employee_id = ?",
+      [emp.employee_id]
     );
 
-    await conn.query("UPDATE employees SET token = ? WHERE id = ?", [token, emp.id]);
+    // สร้าง JWT
+    const token = jwt.sign(
+      { id: emp.employee_id, phone: emp.phone, email: emp.email },
+      JWT_SECRET,
+      { expiresIn: "30m" }
+    );
 
     res.json({
       message: "เข้าสู่ระบบสำเร็จ",
       token,
       user: {
-        id: emp.id,
+        id: emp.employee_id,
         first_name: emp.first_name,
         last_name: emp.last_name,
         phone: emp.phone,
@@ -69,12 +93,11 @@ app.post("/api/login", async (req, res) => {
       }
     });
   } catch (err) {
-    console.error(err);
+    console.error("Login Error:", err);
     res.status(500).json({ error: "เกิดข้อผิดพลาดของ server" });
   } finally {
     if (conn) conn.release();
   }
 });
-
 
 module.exports = app;
