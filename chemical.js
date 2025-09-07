@@ -87,4 +87,24 @@ app.get("/api/chemicals/all", authMiddleware, async (req, res) => {
   }
 });
 
+// ✅ ดึงรายการประเภทสารเคมีทั้งหมด
+app.get("/api/chemicals/types", authMiddleware, async (req, res) => {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+
+    const rows = await conn.query(
+      "SELECT type_name FROM chemical_types ORDER BY type_name ASC"
+    );
+
+    res.json({ types: rows });
+  } catch (err) {
+    console.error("Get Chemical Types Error:", err);
+    res.status(500).json({ error: "Server error" });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+
 module.exports = app;
