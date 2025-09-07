@@ -1,0 +1,3 @@
+npm init -y
+npm install express mariadb bcrypt jsonwebtoken body-parser
+npm install cors
