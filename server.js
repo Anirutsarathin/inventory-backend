@@ -6,6 +6,7 @@ const loginRoutes = require("./login");
 const employeeRoutes = require("./employee");
 const chemicalRoutes = require("./chemical"); 
 const roleRoutes = require("./role"); 
+const pageRoutes = require("./managepage"); 
 
 
 const app = express();
@@ -19,6 +20,7 @@ app.use(loginRoutes);
 app.use(employeeRoutes);
 app.use(chemicalRoutes);
 app.use(roleRoutes);
+app.use(pageRoutes);
 
 app.listen(PORT, () => {
   console.log(`✅ Server running at http://localhost:${PORT}`);
