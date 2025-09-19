@@ -137,4 +137,83 @@ app.delete("/api/employees/:id", authMiddleware, async (req, res) => {
   }
 });
 
+// ----------------------
+// POST add employee
+// ----------------------
+app.post("/api/add/employees", authMiddleware, async (req, res) => {
+  let conn;
+  const {
+    first_name,
+    last_name,
+    phone,
+    position_id,
+    status,
+    gender,
+    email,
+    address,
+    subdistrict_id,
+    district_id,
+    province_id,
+    start_date,
+    password, // ✅ รับจาก client
+  } = req.body;
+
+  try {
+    conn = await pool.getConnection();
+
+    // ✅ validate input
+    if (!first_name || !last_name || !position_id || !password) {
+      return res.status(400).json({
+        error: "กรุณากรอก first_name, last_name, position_id และ password",
+      });
+    }
+
+    // ✅ hash password ที่รับมา
+    const bcrypt = require("bcrypt");
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    // ✅ insert
+    const result = await conn.query(
+      `INSERT INTO employees 
+        (first_name, last_name, phone, password, gender, email, address, subdistrict_id, district_id, province_id, position_id, start_date, status, login_attempts)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      [
+        first_name,
+        last_name,
+        phone || "",
+        hashedPassword, // ✅ เก็บ password ที่ถูก hash
+        gender || 0,
+        email || "",
+        address || "",
+        subdistrict_id || null,
+        district_id || null,
+        province_id || null,
+        position_id,
+        start_date || new Date(),
+        status ?? 1,
+      ]
+    );
+
+    // ✅ ดึง record ล่าสุดที่เพิ่ง insert
+    const [newEmployee] = await conn.query(
+      `SELECT e.employee_id, e.first_name, e.last_name,
+              CONCAT(e.first_name,' ',e.last_name) as name,
+              p.position_id, p.position_name as position,
+              e.phone, e.status,
+              CASE WHEN e.status = 0 THEN 'INACTIVE' ELSE 'ACTIVE' END as status_label
+       FROM employees e
+       INNER JOIN positions p ON e.position_id = p.position_id
+       WHERE e.employee_id = ?`,
+      [result.insertId]
+    );
+
+    res.json(newEmployee);
+  } catch (err) {
+    console.error("Add Employee Error:", err);
+    res.status(500).json({ error: "เกิดข้อผิดพลาดของ server" });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 module.exports = app;
