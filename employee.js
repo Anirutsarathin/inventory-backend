@@ -164,7 +164,7 @@ app.post("/api/add/employees", authMiddleware, async (req, res) => {
     // ✅ validate input
     if (!first_name || !last_name || !position_id || !password) {
       return res.status(400).json({
-        error: "กรุณากรอก first_name, last_name, position_id และ password",
+        error: "กรุณากรอก first_name, last_name, position_id และ password",  
       });
     }
 

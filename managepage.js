@@ -50,4 +50,34 @@ app.post("/api/permissions/add", authMiddleware, async (req, res) => {
   }
 });
 
+// 📌 DELETE ลบสิทธิ์ทั้งหมดของตำแหน่ง
+app.delete("/api/permissions/position/:position_id", authMiddleware, async (req, res) => {
+  let conn;
+  const { position_id } = req.params;
+
+  try {
+    conn = await pool.getConnection();
+
+    // ตรวจสอบว่ามี position นี้จริงไหม
+    const [check] = await conn.query(
+      "SELECT position_id FROM positions WHERE position_id = ?",
+      [position_id]
+    );
+
+    if (!check) {
+      return res.status(404).json({ error: "ไม่พบตำแหน่งนี้" });
+    }
+
+    // ลบสิทธิ์ทั้งหมดของตำแหน่ง
+    await conn.query("DELETE FROM permissions WHERE position_id = ?", [position_id]);
+
+    res.json({ message: "ลบสิทธิ์สำเร็จ", position_id });
+  } catch (err) {
+    console.error("Delete permission error:", err);
+    res.status(500).json({ error: "เกิดข้อผิดพลาดของ server" });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 module.exports = app;
