@@ -3,7 +3,7 @@ const pool = require("./db");
 const authMiddleware = require("./authMiddleware");
 
 const app = express();
-app.use(express.json()); // ✅ รองรับ JSON body
+app.use(express.json()); 
 
 // 📌 GET page (ของเดิม)
 app.get("/api/page", authMiddleware, async (req, res) => {

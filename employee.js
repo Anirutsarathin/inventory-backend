@@ -66,6 +66,32 @@ app.get("/api/employees/position", authMiddleware, async (req, res) => {
   }
 });
 
+// GET positionsrole
+// ----------------------
+app.get("/api/employees/position/role", authMiddleware, async (req, res) => {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+
+    const rows = await conn.query(
+   
+      `SELECT 
+          p.position_id as id,
+          p.position_name as name
+       FROM positions p
+       where p.position_id not in (select p2.position_id from permissions p2 );`
+
+    );
+
+    res.json({ employees: rows });
+  } catch (err) {
+    console.error("Get Employees position Error:", err);
+    res.status(500).json({ error: "เกิดข้อผิดพลาดของ server" });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 // ----------------------
 // PUT update employee
 // ----------------------

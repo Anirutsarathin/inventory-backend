@@ -106,5 +106,89 @@ app.get("/api/chemicals/types", authMiddleware, async (req, res) => {
   }
 });
 
+// ✅ ลบสารเคมีตาม chemical_id
+app.delete("/api/chemicals/:id", authMiddleware, async (req, res) => {
+  const { id } = req.params;
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+
+    // ตรวจสอบว่ามี chemical_id นี้อยู่จริงไหม
+    const check = await conn.query(
+      "SELECT chemical_id FROM chemicals WHERE chemical_id = ?",
+      [id]
+    );
+
+    if (check.length === 0) {
+      return res.status(404).json({ error: "ไม่พบสารเคมีที่ต้องการลบ" });
+    }
+
+    // ลบข้อมูล
+    await conn.query("DELETE FROM chemicals WHERE chemical_id = ?", [id]);
+
+    res.json({ message: "ลบสารเคมีสำเร็จ", chemical_id: id });
+  } catch (err) {
+    console.error("Delete Chemical Error:", err);
+    res.status(500).json({ error: "Server error" });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// ✅ แก้ไขข้อมูลสารเคมี
+app.put("/api/chemicals/:id", authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const {
+    chemical_name,
+    chemical_type,
+    quantity,
+    received_date,
+    expiry_date,
+    company_name,
+    price,
+  } = req.body;
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+
+    // ตรวจสอบว่ามี chemical_id นี้อยู่จริงไหม
+    const check = await conn.query(
+      "SELECT chemical_id FROM chemicals WHERE chemical_id = ?",
+      [id]
+    );
+
+    if (check.length === 0) {
+      return res.status(404).json({ error: "ไม่พบสารเคมีที่ต้องการแก้ไข" });
+    }
+
+    // ✅ update
+    await conn.query(
+      `UPDATE chemicals 
+       SET chemical_name = ?, chemical_type = ?, quantity = ?, 
+           received_date = ?, expiry_date = ?, company_name = ?, price = ?
+       WHERE chemical_id = ?`,
+      [
+        chemical_name,
+        chemical_type,
+        quantity,
+        received_date,
+        expiry_date,
+        company_name,
+        price,
+        id,
+      ]
+    );
+
+    res.json({ message: "แก้ไขสารเคมีสำเร็จ", chemical_id: id });
+  } catch (err) {
+    console.error("Update Chemical Error:", err);
+    res.status(500).json({ error: "Server error" });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 
 module.exports = app;

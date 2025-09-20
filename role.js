@@ -11,6 +11,7 @@ app.get("/api/role", authMiddleware, async (req, res) => {
 
     const rows = await conn.query(
       `SELECT DISTINCT 
+          po.position_id,
           po.position_name,
           pa.page_name
        FROM permissions pe
