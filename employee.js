@@ -242,4 +242,113 @@ app.post("/api/add/employees", authMiddleware, async (req, res) => {
   }
 });
 
+// GET Province 
+// ----------------------
+app.get("/api/employees/province", async (req, res) => {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+
+    const rows = await conn.query(
+   
+      `SELECT ProvinceID,ProvinceName  FROM province `
+
+    );
+
+    res.json({ employees: rows });
+  } catch (err) {
+    console.error("Get Province Error:", err);
+    res.status(500).json({ error: "เกิดข้อผิดพลาดของ server" });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+// GET Province 
+// ----------------------
+app.get("/api/employees/province", async (req, res) => {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+
+    const rows = await conn.query(
+   
+      `SELECT ProvinceID,ProvinceName  FROM province `
+
+    );
+
+    res.json({ employees: rows });
+  } catch (err) {
+    console.error("Get Province Error:", err);
+    res.status(500).json({ error: "เกิดข้อผิดพลาดของ server" });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// GET district 
+// ----------------------
+app.get("/api/employees/district", async (req, res) => {
+  let conn;
+  try {
+    // ✅ รับ provinceId จาก query เช่น /api/employees/district?provinceId=10
+    const { provinceId } = req.query;
+
+    if (!provinceId) {
+      return res.status(400).json({ error: "กรุณาระบุ provinceId" });
+    }
+
+    conn = await pool.getConnection();
+
+    const sql = `
+      SELECT 
+        d.DistrictID,
+        d.DistrictName
+      FROM district d
+      WHERE d.ProvinceID = ?
+    `;
+
+   const rows = await conn.query(sql, [provinceId]);
+
+
+    res.json({ districts: rows });
+  } catch (err) {
+    console.error("Get District Error:", err);
+    res.status(500).json({ error: "เกิดข้อผิดพลาดของ server" });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// GET sub_district 
+// ----------------------
+app.get("/api/employees/sub_district", async (req, res) => {
+  let conn;
+  try {
+    const { DistrictID } = req.query;
+
+    if (!DistrictID) {
+      return res.status(400).json({ error: "กรุณาระบุ provinceId" });
+    }
+
+    conn = await pool.getConnection();
+
+    const sql = `
+      select 
+      s.SubdistrictID,s.SubdistrictName,s.PostalCode
+      from subdistrict s 
+      where s.DistrictID = ?
+    `;
+
+   const rows = await conn.query(sql, [DistrictID]);
+
+
+    res.json({ districts: rows });
+  } catch (err) {
+    console.error("Get District Error:", err);
+    res.status(500).json({ error: "เกิดข้อผิดพลาดของ server" });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 module.exports = app;
