@@ -5,6 +5,13 @@ const authMiddleware = require("./authMiddleware");
 const app = express();
 app.use(express.json());
 
+
+
+
+
+
+
+
 app.post("/api/chemicals/add", authMiddleware, async (req, res) => {
   const {
     chemical_name,
@@ -17,6 +24,8 @@ app.post("/api/chemicals/add", authMiddleware, async (req, res) => {
   } = req.body;
 
   let conn;
+  const create_by = req.user?.username || "system"; // ✅ ดึงชื่อผู้ใช้จาก token ถ้ามี
+
   try {
     conn = await pool.getConnection();
 
@@ -28,6 +37,7 @@ app.post("/api/chemicals/add", authMiddleware, async (req, res) => {
       expiry_date,
       company_name,
       price,
+      create_by,
     });
 
     // ---------------------------
@@ -82,12 +92,9 @@ app.post("/api/chemicals/add", authMiddleware, async (req, res) => {
 
     let existRows = [];
     if (Array.isArray(existResult) && existResult.length > 0) {
-      // ✅ ถ้าเป็น array ของ object
       if (existResult[0] && existResult[0].chemical_id) {
         existRows = [existResult[0]];
-      }
-      // ✅ ถ้าเป็น array ซ้อน เช่น [ [ { chemical_id: 'chacc000001' } ], fields ]
-      else if (
+      } else if (
         Array.isArray(existResult[0]) &&
         existResult[0].length > 0 &&
         existResult[0][0].chemical_id
@@ -95,14 +102,15 @@ app.post("/api/chemicals/add", authMiddleware, async (req, res) => {
         existRows = existResult[0];
       }
     } else if (existResult && existResult.chemical_id) {
-      // ✅ ถ้าเป็น object เดี่ยว
       existRows = [existResult];
     }
 
     console.log("🔍 [DEBUG] existRows ที่ประมวลผลแล้ว:", existRows);
 
+    // ----------------------------------------------------------
+    // ✅ เคส 1: ถ้ามีข้อมูลซ้ำ → Update และบันทึก History
+    // ----------------------------------------------------------
     if (existRows.length > 0) {
-      // ✅ ถ้ามีข้อมูลซ้ำ → update แทน
       const oldQty = parseFloat(existRows[0].quantity || 0);
       const newQty = oldQty + parseFloat(quantity || 0);
 
@@ -120,18 +128,35 @@ app.post("/api/chemicals/add", authMiddleware, async (req, res) => {
         [newQty, received_date, company_name, price, existRows[0].chemical_id]
       );
 
+      // 🧾 Insert log ลง history
+      await conn.query(
+        `INSERT INTO chemi.history
+        (ChemicalName, ChemicalType, Quantity, ReceivedDate, ExpiryDate, \`Condition\`, CompanyName, Price, create_date, create_by)
+        VALUES (?, ?, ?, ?, ?, 'stock', ?, ?, SYSDATE(), ?)`,
+        [
+          chemical_name,
+          chemical_type,
+          quantity,
+          received_date,
+          expiry_date,
+          company_name,
+          price,
+          create_by,
+        ]
+      );
+
       console.log("✅ [UPDATE SUCCESS] chemical_id:", existRows[0].chemical_id);
 
       return res.json({
-        message: "พบข้อมูลสารเคมีซ้ำ → บวกจำนวนเพิ่มเรียบร้อยแล้ว",
+        message: "พบข้อมูลสารเคมีซ้ำ → บวกจำนวนเพิ่มเรียบร้อยแล้ว (บันทึกประวัติแล้ว)",
         chemical_id: existRows[0].chemical_id,
         new_quantity: newQty,
       });
     }
 
-    // ---------------------------
-    // ✅ ถ้าไม่ซ้ำ → gen ID ใหม่
-    // ---------------------------
+    // ----------------------------------------------------------
+    // ✅ เคส 2: ถ้าไม่ซ้ำ → Insert ใหม่ + History
+    // ----------------------------------------------------------
     const prefix = "ch" + typeId;
     console.log("🧩 [DEBUG] prefix:", prefix);
 
@@ -151,8 +176,6 @@ app.post("/api/chemicals/add", authMiddleware, async (req, res) => {
       }
     }
 
-    console.log("📊 [DEBUG] maxIdRows ที่ประมวลผลแล้ว:", maxIdRows);
-
     let runNo = 1;
     if (maxIdRows.length > 0) {
       const lastId = maxIdRows[0].chemical_id;
@@ -165,7 +188,7 @@ app.post("/api/chemicals/add", authMiddleware, async (req, res) => {
     const newId = prefix + runNo.toString().padStart(6, "0");
     console.log("🆔 [DEBUG] chemical_id ใหม่:", newId);
 
-    // ✅ insert สารเคมีใหม่
+    // ✅ Insert chemical ใหม่
     await conn.query(
       `INSERT INTO chemicals
        (chemical_id, chemical_name, chemical_type, quantity, received_date, expiry_date, company_name, price)
@@ -182,19 +205,61 @@ app.post("/api/chemicals/add", authMiddleware, async (req, res) => {
       ]
     );
 
+    // 🧾 Insert ลง history
+    await conn.query(
+      `INSERT INTO chemi.history
+      (ChemicalName, ChemicalType, Quantity, ReceivedDate, ExpiryDate, \`Condition\`, CompanyName, Price, create_date, create_by)
+      VALUES (?, ?, ?, ?, ?, 'stock', ?, ?, SYSDATE(), ?)`,
+      [
+        chemical_name,
+        chemical_type,
+        quantity,
+        received_date,
+        expiry_date,
+        company_name,
+        price,
+        create_by,
+      ]
+    );
+
     console.log("✅ [SUCCESS] เพิ่มสารเคมีใหม่สำเร็จ:", newId);
 
     res.json({
-      message: "เพิ่มสารเคมีใหม่สำเร็จ",
+      message: "เพิ่มสารเคมีใหม่สำเร็จ (พร้อมบันทึกประวัติ)",
       chemical_id: newId,
     });
   } catch (err) {
     console.error("❌ [ERROR] Add Chemical Error:", err);
+
+    // ✅ เพิ่ม log ละเอียดเพื่อ debug ได้เต็ม
+    console.error("🔍 [ERROR DETAILS]", {
+      message: err.message,
+      stack: err.stack,
+      sql: err.sql,
+      sqlMessage: err.sqlMessage,
+      sqlState: err.sqlState,
+      code: err.code,
+    });
+
     res.status(500).json({ error: "Server error" });
   } finally {
     if (conn) conn.release();
   }
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 // ✅ ดึงสารเคมีทั้งหมด
@@ -323,6 +388,28 @@ app.put("/api/chemicals/:id", authMiddleware, async (req, res) => {
   }
 });
 
+
+// GET ประวัติสารเคมี
+// ----------------------
+app.get("/api/chemicals/his", async (req, res) => {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+
+    const rows = await conn.query(
+   
+      `select * from history h  `
+
+    );
+
+    res.json({ history: rows });
+  } catch (err) {
+    console.error("Get history Error:", err);
+    res.status(500).json({ error: "เกิดข้อผิดพลาดของ server" });
+  } finally {
+    if (conn) conn.release();
+  }
+});
 
 
 module.exports = app;
